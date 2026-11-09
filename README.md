@@ -20,27 +20,11 @@ the document, re-rendering on every save.
 Download and install the latest release into `~/.local/bin` (no Go required):
 
 ```sh
-(
-  set -eu
-  case "$(uname -s)" in
-    Darwin) os=darwin ;;
-    Linux) os=linux ;;
-    *) echo "Unsupported operating system" >&2; exit 1 ;;
-  esac
-  case "$(uname -m)" in
-    arm64|aarch64) arch=arm64 ;;
-    x86_64|amd64) arch=amd64 ;;
-    *) echo "Unsupported architecture" >&2; exit 1 ;;
-  esac
-  archive="rexmd_${os}_${arch}"
-  tmp=$(mktemp -d)
-  trap 'rm -rf "$tmp"' EXIT
-  curl -fL "https://github.com/ncphillips/rex-md/releases/latest/download/${archive}.tar.gz" -o "$tmp/rexmd.tar.gz"
-  tar -xzf "$tmp/rexmd.tar.gz" -C "$tmp"
-  mkdir -p "$HOME/.local/bin"
-  install -m 755 "$tmp/$archive/rexmd" "$HOME/.local/bin/rexmd"
-)
+curl -fsSL https://raw.githubusercontent.com/ncphillips/rex-md/main/install.sh | sh
 ```
+
+The [install script](install.sh) detects your OS and architecture and downloads
+the matching prebuilt binary.
 
 Ensure `~/.local/bin` is on your `PATH` (add this to your shell profile):
 
