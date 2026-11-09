@@ -83,6 +83,7 @@ type Span struct {
 	Text  string
 	Style Style
 	Link  int // 1-based index into Document.Links; 0 for none
+	Copy  int // 1-based index into Document.Code; code-block copy button
 	Image *ImageRef
 }
 
@@ -134,6 +135,7 @@ type Document struct {
 	Lines    []Line
 	Headings []Heading
 	Links    []Link
+	Code     []string // original code, before highlighting, tab expansion or wrapping
 	Anchors  map[string]int
 	// Pending is true when some images were still loading during layout.
 	Pending bool

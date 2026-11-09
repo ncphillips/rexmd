@@ -18,7 +18,46 @@ func (p *Pager) handleInput(b []byte) {
 }
 
 func (p *Pager) handleMouse(m Mouse) {
-	if !m.Press {
+	if x, y, w := p.toastBounds(); w > 0 && m.X >= x && m.X < x+w && m.Y >= y && m.Y < y+3 {
+		if m.Press && !m.Motion && m.Button == 0 {
+			p.toast = nil
+			p.dragging = false
+		}
+		return
+	}
+	if p.help || p.prompt != nil {
+		return
+	}
+	if m.Button == 0 {
+		if m.Motion {
+			if p.dragging {
+				p.updateSelection(m)
+			}
+			return
+		}
+		if !m.Press {
+			if !p.dragging {
+				return
+			}
+			p.updateSelection(m)
+			p.dragging = false
+			if p.selection != nil {
+				p.message = "y / Ctrl+C to copy selection"
+				return
+			}
+			// A click, not a drag: activate links and copy buttons on release.
+		} else {
+			p.selection, p.dragging = nil, false
+			if pos, ok := p.mousePoint(m); ok {
+				p.dragStart, p.dragging = pos, true
+				p.dragMode = openHere
+				if m.Alt {
+					p.dragMode = openTab
+				}
+				return
+			}
+		}
+	} else if !m.Press || m.Motion {
 		return
 	}
 	switch m.Button {
@@ -36,11 +75,15 @@ func (p *Pager) handleMouse(m Mouse) {
 			}
 			return
 		}
-		if m.Y < len(p.clicks) {
+		if m.Y >= 0 && m.Y < len(p.clicks) {
 			for _, z := range p.clicks[m.Y] {
 				if m.X >= z.x0 && m.X < z.x1 {
+					if z.copy > 0 {
+						p.copyToClipboard(p.doc.Code[z.copy-1])
+						return
+					}
 					p.focus = z.link
-					p.follow(z.link, openHere)
+					p.follow(z.link, p.dragMode)
 					return
 				}
 			}
@@ -62,6 +105,10 @@ func (p *Pager) handleKey(k string) {
 		return
 	}
 	page := p.viewRows() - 2
+	if (k == "y" || k == "ctrl+c" || k == "super+c") && p.selection != nil {
+		p.copyToClipboard(p.selectedText())
+		return
+	}
 	switch k {
 	case "q", "ctrl+c":
 		p.quitting = true
@@ -101,6 +148,7 @@ func (p *Pager) handleKey(k string) {
 			p.copyToClipboard(p.doc.Links[p.focus-1].URL)
 		}
 	case "esc":
+		p.selection, p.dragging = nil, false
 		p.focus = 0
 		p.query, p.matches = "", nil
 	case "backspace", "H", "ctrl+o":

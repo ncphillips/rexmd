@@ -74,8 +74,17 @@ rexmd --anchor usage docs/guide.md
 Press `?` inside for keys. The essentials: `j`/`k`, `space`/`b`, `t` for a
 table of contents, `/` to search, `tab` to select links, `⏎` to follow,
 `o` to follow in a Rex split, `e` to edit, `⌫` to go back.
+Option-click (Alt-click) opens a local Markdown link in a new Rex tab, if
+the terminal forwards the modifier.
 
-Try [the tour](examples/tour.md).
+Click `[copy]` in a code-block header to copy the original code. Drag with
+the mouse to highlight text, then press `y` or `Ctrl+C` to copy the selection;
+`Esc` clears it. Clipboard copying uses OSC 52 and needs terminal support.
+`Cmd+C` also copies the selection on macOS if your terminal forwards it
+using the Kitty keyboard protocol; if it reserves `Cmd+C` for native
+terminal selection, use `y` instead.
+
+Try [the showcase](docs/example.md): `rexmd docs/example.md`.
 
 ## How it works
 

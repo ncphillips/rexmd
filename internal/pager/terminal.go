@@ -35,7 +35,10 @@ func (p *Pager) probeTerminal() probe {
 loop:
 	for {
 		select {
-		case b := <-p.input:
+		case b, ok := <-p.input:
+			if !ok {
+				break loop
+			}
 			buf = append(buf, b...)
 			if da1Re.Match(buf) {
 				break loop

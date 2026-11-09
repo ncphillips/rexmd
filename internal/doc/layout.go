@@ -184,9 +184,9 @@ func (l *layouter) block(n ast.Node) {
 		if v.Info != nil {
 			lang = strings.Fields(string(v.Info.Segment.Value(l.src)) + " ")[0]
 		}
-		l.codeBlock(strings.ToLower(lang), l.lines(v))
+		l.codeBlock(strings.ToLower(lang), l.rawLines(v))
 	case *ast.CodeBlock:
-		l.codeBlock("", l.lines(v))
+		l.codeBlock("", l.rawLines(v))
 	case *ast.Blockquote:
 		l.blockquote(v)
 	case *ast.List:
@@ -209,12 +209,16 @@ func (l *layouter) block(n ast.Node) {
 }
 
 func (l *layouter) lines(n ast.Node) string {
+	return strings.TrimSuffix(l.rawLines(n), "\n")
+}
+
+func (l *layouter) rawLines(n ast.Node) string {
 	var b strings.Builder
 	for i := 0; i < n.Lines().Len(); i++ {
 		seg := n.Lines().At(i)
 		b.Write(seg.Value(l.src))
 	}
-	return strings.TrimSuffix(b.String(), "\n")
+	return b.String()
 }
 
 func (l *layouter) heading(n *ast.Heading) {

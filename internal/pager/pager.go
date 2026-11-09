@@ -46,11 +46,12 @@ type histEntry struct {
 const tocWidth = 32
 
 type Pager struct {
-	cfg     Config
-	tty     *os.File
-	out     *bufio.Writer
-	input   chan []byte
-	pending []byte
+	cfg      Config
+	tty      *os.File
+	out      *bufio.Writer
+	input    chan []byte
+	inputErr error // written by readLoop before it closes input
+	pending  []byte
 
 	rows, cols int
 	cell       doc.CellSize
@@ -77,11 +78,16 @@ type Pager struct {
 	help     bool
 	message  string
 	quitting bool
+	toast    <-chan time.Time
 
 	back, fwd []histEntry
 	images    map[string]uint32
 	nextID    uint32
 	clicks    [][]clickZone
+	selection *selection
+	dragging  bool
+	dragStart point
+	dragMode  openMode
 
 	watcher    *fsnotify.Watcher
 	watchedDir string
@@ -90,7 +96,7 @@ type Pager struct {
 	rexStatus  string
 }
 
-type clickZone struct{ x0, x1, link int }
+type clickZone struct{ x0, x1, link, copy int }
 
 func Run(cfg Config) error {
 	tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
@@ -118,7 +124,7 @@ func Run(cfg Config) error {
 	p.assets.Remote = cfg.Remote
 	go p.readLoop()
 
-	p.out.WriteString("\x1b[?1049h\x1b[?25l\x1b[?1000h\x1b[?1006h\x1b[>1u")
+	p.out.WriteString("\x1b[?1049h\x1b[?25l\x1b[?1002h\x1b[?1006h\x1b[>1u")
 	defer p.cleanup()
 
 	pr := p.probeTerminal()
@@ -174,7 +180,7 @@ func Run(cfg Config) error {
 		select {
 		case b, ok := <-p.input:
 			if !ok {
-				return nil
+				return fmt.Errorf("read terminal input: %w", p.inputErr)
 			}
 			p.handleInput(b)
 		case <-winch:
@@ -191,6 +197,8 @@ func Run(cfg Config) error {
 			continue
 		case <-p.debounce.C:
 			p.reload()
+		case <-p.toast:
+			p.toast = nil
 		}
 		p.draw()
 	}
@@ -202,6 +210,7 @@ func (p *Pager) readLoop() {
 	for {
 		n, err := p.tty.Read(buf)
 		if err != nil {
+			p.inputErr = err
 			close(p.input)
 			return
 		}
@@ -213,7 +222,7 @@ func (p *Pager) cleanup() {
 	for _, id := range p.images {
 		p.out.WriteString(kitty.Delete(id))
 	}
-	p.out.WriteString("\x1b[<u\x1b[?1006l\x1b[?1000l\x1b[0m\x1b[?25h\x1b[?1049l")
+	p.out.WriteString("\x1b[<u\x1b[?1006l\x1b[?1002l\x1b[0m\x1b[?25h\x1b[?1049l")
 	if rex.InRex() {
 		p.out.WriteString(rex.StatusSequence("idle", "", ""))
 	}
@@ -267,9 +276,13 @@ type noAssets struct{}
 
 func (noAssets) Lookup(doc.Request) doc.Asset { return doc.Asset{State: doc.Failed} }
 
-func (p *Pager) viewRows() int { return max(p.rows-1, 1) }
+// Leave breathing room between the document and the status bar.
+const bottomPadding = 2
+
+func (p *Pager) viewRows() int { return max(p.rows-1-bottomPadding, 1) }
 
 func (p *Pager) relayout() {
+	p.selection, p.dragging = nil, false
 	avail := p.cols
 	offset := 0
 	if p.toc {
@@ -471,7 +484,7 @@ func (p *Pager) edit() {
 		}
 		return
 	}
-	p.out.WriteString("\x1b[<u\x1b[?1006l\x1b[?1000l\x1b[?25h\x1b[?1049l")
+	p.out.WriteString("\x1b[<u\x1b[?1006l\x1b[?1002l\x1b[?25h\x1b[?1049l")
 	p.out.Flush()
 	state, _ := term.GetState(int(p.tty.Fd()))
 	cmd := exec.Command(argv[0], argv[1:]...)
@@ -480,7 +493,7 @@ func (p *Pager) edit() {
 	if state != nil {
 		_ = term.Restore(int(p.tty.Fd()), state)
 	}
-	p.out.WriteString("\x1b[?1049h\x1b[?25l\x1b[?1000h\x1b[?1006h\x1b[>1u")
+	p.out.WriteString("\x1b[?1049h\x1b[?25l\x1b[?1002h\x1b[?1006h\x1b[>1u")
 	for k := range p.images {
 		delete(p.images, k) // the alternate screen was cleared; send them again
 	}
@@ -491,7 +504,8 @@ func (p *Pager) flash(msg string) { p.message = msg }
 
 func (p *Pager) copyToClipboard(s string) {
 	p.out.WriteString("\x1b]52;c;" + base64.StdEncoding.EncodeToString([]byte(s)) + "\x1b\\")
-	p.flash("copied " + s)
+	p.message = ""
+	p.toast = time.After(3 * time.Second)
 }
 
 // --- links and search ---

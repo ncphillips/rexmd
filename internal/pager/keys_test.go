@@ -57,6 +57,13 @@ func TestParseInput(t *testing.T) {
 		}
 	})
 
+	t.Run("option-click preserves the Meta modifier separately from the button", func(t *testing.T) {
+		ev := parseOne(t, "\x1b[<8;5;3M")
+		if ev.Mouse == nil || !ev.Mouse.Alt || ev.Mouse.Button != 0 {
+			t.Fatalf("got %+v", ev.Mouse)
+		}
+	})
+
 	t.Run("an incomplete sequence is kept for the next read", func(t *testing.T) {
 		_, rest := parseInput([]byte("\x1b[<0;5"), false)
 

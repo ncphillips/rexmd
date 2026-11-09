@@ -10,6 +10,8 @@ type Mouse struct {
 	Button int // 0 left, 1 middle, 2 right, 64/65 wheel up/down
 	X, Y   int // 0-based cell
 	Press  bool
+	Motion bool
+	Alt    bool // Option on macOS; SGR Meta modifier
 }
 
 // Event is a key press (Key is "j", "G", "enter", "ctrl+d", ...) or a mouse
@@ -107,7 +109,7 @@ func parseCSI(b []byte) (Event, int) {
 		btn, _ := strconv.Atoi(f[0])
 		x, _ := strconv.Atoi(f[1])
 		y, _ := strconv.Atoi(f[2])
-		return Event{Mouse: &Mouse{Button: btn &^ (4 | 8 | 16 | 32), X: x - 1, Y: y - 1, Press: final == 'M'}}, n
+		return Event{Mouse: &Mouse{Button: btn &^ (4 | 8 | 16 | 32), X: x - 1, Y: y - 1, Press: final == 'M', Motion: btn&32 != 0, Alt: btn&8 != 0}}, n
 	}
 
 	if final == 'u' {
@@ -127,6 +129,9 @@ func parseCSI(b []byte) (Event, int) {
 		}
 		if mods&2 != 0 {
 			name = "alt+" + name
+		}
+		if mods&8 != 0 {
+			name = "super+" + name
 		}
 		return Event{Key: name}, n
 	}

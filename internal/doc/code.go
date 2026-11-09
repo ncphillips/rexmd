@@ -43,15 +43,22 @@ func (l *layouter) codeLines(code, lang, label string) {
 	bg := Style{BG: t.CodeBG}
 	w := l.avail()
 	var header []Span
-	if lw := runewidth.StringWidth(label); label != "" && lw+2 <= w {
+	if w >= 6 {
+		l.doc.Code = append(l.doc.Code, code)
+		label = runewidth.Truncate(label, max(w-9, 0), "")
+		if label != "" {
+			label += " "
+		}
+		lw := runewidth.StringWidth(label)
 		header = []Span{
-			{Text: strings.Repeat(" ", w-lw-1), Style: bg},
+			{Text: strings.Repeat(" ", w-lw-6), Style: bg},
 			{Text: label, Style: Style{BG: t.CodeBG, FG: t.Muted, Italic: true}},
+			{Text: "[copy]", Style: Style{BG: t.CodeBG, FG: t.Accent, Bold: true}, Copy: len(l.doc.Code)},
 		}
 	}
 	l.emit(pad(header, w, bg))
 	inner := max(w-2, 1)
-	for _, line := range l.highlight(code, lang) {
+	for _, line := range l.highlight(strings.TrimSuffix(code, "\n"), lang) {
 		rest := line
 		for {
 			head, tail, _ := cutSpans(rest, inner)

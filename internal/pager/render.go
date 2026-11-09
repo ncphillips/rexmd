@@ -40,10 +40,14 @@ func (p *Pager) draw() {
 			p.drawLine(i, y)
 		}
 	}
+	for y := view; y < p.rows-1; y++ {
+		fmt.Fprintf(b, "\x1b[%d;1H\x1b[0m\x1b[2K", y+1)
+	}
 	p.drawStatus()
 	if p.help {
 		p.drawHelp()
 	}
+	p.drawToast()
 	b.WriteString("\x1b[0m\x1b[?2026l")
 	b.Flush()
 }
@@ -76,6 +80,14 @@ func (p *Pager) drawLine(i, y int) {
 	if p.query != "" {
 		spans = highlight(spans, p.query, p.theme)
 	}
+	if start, end, ok := p.selectionRange(i); ok {
+		head, rest := doc.Split(spans, start)
+		mid, tail := doc.Split(rest, end-start)
+		for j := range mid {
+			mid[j].Style.Reverse = true
+		}
+		spans = append(append(head, mid...), tail...)
+	}
 	spans = doc.Cut(spans, p.cols-p.left)
 	x := p.left
 	for _, s := range spans {
@@ -99,8 +111,8 @@ func (p *Pager) drawLine(i, y int) {
 				b.WriteString(s.Text)
 			}
 		}
-		if s.Link > 0 {
-			p.clicks[y] = append(p.clicks[y], clickZone{x, x + w, s.Link})
+		if s.Link > 0 || s.Copy > 0 {
+			p.clicks[y] = append(p.clicks[y], clickZone{x0: x, x1: x + w, link: s.Link, copy: s.Copy})
 		}
 		x += w
 	}
@@ -228,12 +240,43 @@ var helpText = []string{
 	"/ n N          search, next, previous",
 	"tab shift-tab  select link",
 	"⏎ / click      follow link",
+	"option-click   open link in a Rex tab",
 	"o O            open link in Rex split / tab",
 	"y              copy link",
+	"drag           select text; y / ctrl+c to copy",
+	"esc            clear selection / search",
+	"[copy]         click to copy a code block",
 	"⌫ H  L         back / forward",
 	"e              edit (Rex split, live reload)",
 	"r              reload",
 	"q              quit",
+}
+
+// toastBounds uses screen coordinates, leaving a one-cell margin at the
+// top and right. Very small terminals keep the document unobstructed.
+func (p *Pager) toastBounds() (x, y, w int) {
+	if p.toast == nil || p.cols < 12 || p.rows < 5 {
+		return 0, 0, 0
+	}
+	w = min(36, p.cols-2)
+	return p.cols - w - 1, 1, w
+}
+
+func (p *Pager) drawToast() {
+	x, y, w := p.toastBounds()
+	if w == 0 {
+		return
+	}
+	bg := doc.Style{BG: p.theme.InlineBG}
+	edge := doc.Style{BG: p.theme.InlineBG, FG: p.theme.Accent}
+	text := runewidth.Truncate("Copied to clipboard", w-8, "…")
+	for row := 0; row < 3; row++ {
+		inside := strings.Repeat(" ", w-2)
+		if row == 1 {
+			inside = "  " + text + strings.Repeat(" ", w-7-runewidth.StringWidth(text)) + " × "
+		}
+		fmt.Fprintf(p.out, "\x1b[%d;%dH%s│%s%s%s│\x1b[0m", y+row+1, x+1, edge.SGR(), bg.SGR(), inside, edge.SGR())
+	}
 }
 
 func (p *Pager) drawHelp() {
