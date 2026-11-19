@@ -5,6 +5,7 @@ go 1.27.1
 require (
 	github.com/alecthomas/chroma/v2 v2.27.0
 	github.com/fsnotify/fsnotify v1.10.1
+	github.com/go-docutils/docutils v0.141.1
 	github.com/mattn/go-runewidth v0.0.31
 	github.com/srwiley/oksvg v0.0.0-20221011165216-be6e8873101c
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef

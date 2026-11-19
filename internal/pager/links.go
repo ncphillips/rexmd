@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/ncphillips/rex-md/internal/rst"
 )
 
 type targetKind int
@@ -22,13 +24,15 @@ type target struct {
 	anchor string
 }
 
-func isMarkdown(path string) bool {
+func isDocument(path string) bool {
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".md", ".markdown", ".mdown", ".mkd", ".mdx":
 		return true
 	}
-	return false
+	return rst.IsRST(path)
 }
+
+var readmeNames = []string{"README.md", "readme.md", "Readme.md", "index.md", "README.markdown", "README.rst", "index.rst"}
 
 // resolveLink works out where a link in the document at current points.
 func resolveLink(current, raw string) target {
@@ -48,19 +52,19 @@ func resolveLink(current, raw string) target {
 	}
 	path = filepath.Clean(path)
 	if st, err := os.Stat(path); err == nil && st.IsDir() {
-		if readme := findReadme(path); readme != "" {
+		if readme := FindReadme(path); readme != "" {
 			return target{kind: targetDoc, path: readme, anchor: u.Fragment}
 		}
 		return target{kind: targetFile, path: path}
 	}
-	if isMarkdown(path) {
+	if isDocument(path) {
 		return target{kind: targetDoc, path: path, anchor: u.Fragment}
 	}
 	return target{kind: targetFile, path: path}
 }
 
-func findReadme(dir string) string {
-	for _, name := range []string{"README.md", "readme.md", "Readme.md", "index.md", "README.markdown"} {
+func FindReadme(dir string) string {
+	for _, name := range readmeNames {
 		p := filepath.Join(dir, name)
 		if _, err := os.Stat(p); err == nil {
 			return p

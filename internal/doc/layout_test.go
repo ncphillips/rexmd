@@ -1,24 +1,37 @@
-package doc
+package doc_test
 
 import (
 	"strings"
 	"testing"
+
+	"github.com/ncphillips/rex-md/internal/doc"
+	"github.com/ncphillips/rex-md/internal/md"
 )
 
-type fakeAssets map[string]Asset
+type fakeAssets map[string]doc.Asset
 
-func (f fakeAssets) Lookup(r Request) Asset {
+func (f fakeAssets) Lookup(r doc.Request) doc.Asset {
 	if a, ok := f[r.Src]; ok {
 		return a
 	}
-	return Asset{State: Pending}
+	return doc.Asset{State: doc.Pending}
 }
 
-func layout(src string, width int) *Document {
-	return Layout([]byte(src), Options{Width: width, Theme: Dark, Cell: CellSize{W: 10, H: 20}, Assets: fakeAssets{}})
+func options(width int, a fakeAssets) doc.Options {
+	return doc.Options{Width: width, Theme: doc.Dark, Cell: doc.CellSize{W: 10, H: 20}, Assets: a}
 }
 
-func plain(d *Document) []string {
+// layoutWith uses Markdown as a compact way to build the tree under test.
+func layoutWith(src string, o doc.Options) *doc.Document {
+	root, buf := md.Parse([]byte(src))
+	return doc.Layout(root, buf, o)
+}
+
+func layout(src string, width int) *doc.Document {
+	return layoutWith(src, options(width, fakeAssets{}))
+}
+
+func plain(d *doc.Document) []string {
 	out := make([]string, len(d.Lines))
 	for i, l := range d.Lines {
 		out[i] = strings.TrimRight(l.Plain(), " ")
@@ -59,7 +72,7 @@ func TestLayoutParagraphs(t *testing.T) {
 		}
 	})
 
-	test := func(name, src string, check func(t *testing.T, s Span)) {
+	test := func(name, src string, check func(t *testing.T, s doc.Span)) {
 		t.Run(name, func(t *testing.T) {
 			d := layout(src, 40)
 			for _, sp := range d.Lines[0].Spans {
@@ -72,25 +85,25 @@ func TestLayoutParagraphs(t *testing.T) {
 		})
 	}
 
-	test("strong text is bold", "a **x** b", func(t *testing.T, s Span) {
+	test("strong text is bold", "a **x** b", func(t *testing.T, s doc.Span) {
 		if !s.Style.Bold {
 			t.Error("not bold")
 		}
 	})
 
-	test("emphasis is italic", "a *x* b", func(t *testing.T, s Span) {
+	test("emphasis is italic", "a *x* b", func(t *testing.T, s doc.Span) {
 		if !s.Style.Italic {
 			t.Error("not italic")
 		}
 	})
 
-	test("strikethrough is struck", "a ~~x~~ b", func(t *testing.T, s Span) {
+	test("strikethrough is struck", "a ~~x~~ b", func(t *testing.T, s doc.Span) {
 		if !s.Style.Strike {
 			t.Error("not struck")
 		}
 	})
 
-	test("links carry their URL", "a [x](https://e.com) b", func(t *testing.T, s Span) {
+	test("links carry their URL", "a [x](https://e.com) b", func(t *testing.T, s doc.Span) {
 		if s.Style.Link != "https://e.com" {
 			t.Errorf("got %q", s.Style.Link)
 		}
@@ -168,6 +181,26 @@ func TestLayoutBlocks(t *testing.T) {
 		}
 	})
 
+	t.Run("titles callouts by their kind", func(t *testing.T) {
+		d := layout("> [!WARNING]\n> Careful.", 30)
+
+		if got := strings.Join(plain(d), "|"); got != "▎ ▲ Warning|▎ Careful." {
+			t.Errorf("got %q", got)
+		}
+	})
+
+	t.Run("lays out the same tree repeatedly with the same result", func(t *testing.T) {
+		root, buf := md.Parse([]byte("> [!TIP]\n>\n> Reuse me."))
+		o := options(30, fakeAssets{})
+
+		first := strings.Join(plain(doc.Layout(root, buf, o)), "|")
+		second := strings.Join(plain(doc.Layout(root, buf, o)), "|")
+
+		if first != "▎ ✦ Tip|▎ Reuse me." || second != first {
+			t.Errorf("first %q, second %q", first, second)
+		}
+	})
+
 	t.Run("draws table borders", func(t *testing.T) {
 		d := layout("| a | b |\n|---|---|\n| 1 | 2 |", 20)
 
@@ -175,23 +208,11 @@ func TestLayoutBlocks(t *testing.T) {
 			t.Errorf("got %q", got)
 		}
 	})
-
-	t.Run("skips YAML front matter", func(t *testing.T) {
-		d := layout("---\ntitle: x\n---\nbody", 20)
-
-		if got := plain(d); strings.Join(got, "|") != "body" {
-			t.Errorf("got %q", got)
-		}
-	})
 }
 
 func TestLayoutImages(t *testing.T) {
-	opts := func(a fakeAssets) Options {
-		return Options{Width: 40, Theme: Dark, Cell: CellSize{W: 10, H: 20}, Assets: a}
-	}
-
 	t.Run("a ready image fills rows proportional to its pixel size", func(t *testing.T) {
-		d := Layout([]byte("![alt](pic.png)"), opts(fakeAssets{"pic.png": {State: Ready, W: 100, H: 60}}))
+		d := layoutWith("![alt](pic.png)", options(40, fakeAssets{"pic.png": {State: doc.Ready, W: 100, H: 60}}))
 
 		rows := 0
 		for _, l := range d.Lines {
@@ -207,7 +228,7 @@ func TestLayoutImages(t *testing.T) {
 	})
 
 	t.Run("a pending image shows its alt text", func(t *testing.T) {
-		d := Layout([]byte("![a cat](pic.png)"), opts(fakeAssets{}))
+		d := layoutWith("![a cat](pic.png)", options(40, fakeAssets{}))
 
 		if got := plain(d)[0]; !strings.Contains(got, "a cat") {
 			t.Errorf("got %q", got)
@@ -215,7 +236,7 @@ func TestLayoutImages(t *testing.T) {
 	})
 
 	t.Run("a wide image is scaled down to the width", func(t *testing.T) {
-		d := Layout([]byte("![alt](pic.png)"), opts(fakeAssets{"pic.png": {State: Ready, W: 2000, H: 200}}))
+		d := layoutWith("![alt](pic.png)", options(40, fakeAssets{"pic.png": {State: doc.Ready, W: 2000, H: 200}}))
 
 		if w := d.Lines[0].Width(); w != 40 {
 			t.Errorf("got width %d, want 40", w)

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/ncphillips/rex-md/internal/doc"
+	"github.com/ncphillips/rex-md/internal/md"
 )
 
 func selectionPager() (*Pager, *bytes.Buffer) {
@@ -55,7 +56,8 @@ func TestDragSelection(t *testing.T) {
 func TestCopyCodeButton(t *testing.T) {
 	p, out := selectionPager()
 	code := "\tprintf 'hello world with a long line'\n"
-	p.doc = doc.Layout([]byte("```sh\n"+code+"```\n"), doc.Options{Width: 24})
+	root, buf := md.Parse([]byte("```sh\n" + code + "```\n"))
+	p.doc = doc.Layout(root, buf, doc.Options{Width: 24})
 	p.clicks = make([][]clickZone, p.viewRows())
 	p.drawLine(0, 0)
 	if len(p.clicks[0]) != 1 {

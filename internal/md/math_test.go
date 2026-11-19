@@ -1,21 +1,21 @@
-package doc
+package md
 
 import (
 	"testing"
 
+	"github.com/ncphillips/rex-md/internal/doc"
 	"github.com/yuin/goldmark/ast"
-	"github.com/yuin/goldmark/text"
 )
 
 func parseMath(t *testing.T, src string) string {
 	t.Helper()
-	root := markdown.Parser().Parse(text.NewReader([]byte(src)))
+	root, _ := Parse([]byte(src))
 	var got *string
 	ast.Walk(root, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
-		if m, ok := n.(*MathBlock); ok && entering && got == nil {
+		if m, ok := n.(*doc.MathBlock); ok && entering && got == nil {
 			got = &m.TeX
 		}
-		if m, ok := n.(*MathInline); ok && entering && got == nil {
+		if m, ok := n.(*doc.MathInline); ok && entering && got == nil {
 			got = &m.TeX
 		}
 		return ast.WalkContinue, nil

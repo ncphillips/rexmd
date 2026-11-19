@@ -85,6 +85,7 @@ using the Kitty keyboard protocol; if it reserves `Cmd+C` for native
 terminal selection, use `y` instead.
 
 Try [the showcase](docs/example.md): `rexmd docs/example.md`.
+reStructuredText and Sphinx pages work too: `rexmd examples/tour.rst`.
 
 ## How it works
 

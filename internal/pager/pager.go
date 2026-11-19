@@ -19,12 +19,15 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/yuin/goldmark/ast"
 	"golang.org/x/term"
 
 	"github.com/ncphillips/rex-md/internal/assets"
 	"github.com/ncphillips/rex-md/internal/doc"
 	"github.com/ncphillips/rex-md/internal/kitty"
+	"github.com/ncphillips/rex-md/internal/md"
 	"github.com/ncphillips/rex-md/internal/rex"
+	"github.com/ncphillips/rex-md/internal/rst"
 )
 
 type Config struct {
@@ -62,6 +65,8 @@ type Pager struct {
 	assets *assets.Manager
 	path   string
 	src    []byte
+	root   ast.Node
+	buf    []byte // what root's text segments point into
 	doc    *doc.Document
 	top    int
 	left   int
@@ -241,6 +246,9 @@ func (p *Pager) load(path string) error {
 		return err
 	}
 	p.path, p.src = abs, src
+	if err := p.parse(); err != nil {
+		p.flash(err.Error())
+	}
 	p.top, p.focus, p.tocSel = 0, 0, 0
 	p.doc = nil
 	p.watch(filepath.Dir(abs))
@@ -267,9 +275,27 @@ func (p *Pager) reload() {
 		return
 	}
 	p.src = src
+	if rst.IsRST(p.path) {
+		rst.Forget(p.path)
+	}
+	err = p.parse()
 	p.assets.ForgetLocal()
 	p.relayout()
+	if err != nil {
+		p.flash(err.Error())
+		return
+	}
 	p.flash("reloaded")
+}
+
+func (p *Pager) parse() error {
+	if rst.IsRST(p.path) {
+		var err error
+		p.root, p.buf, err = rst.Load(p.path, p.src)
+		return err
+	}
+	p.root, p.buf = md.Parse(p.src)
+	return nil
 }
 
 type noAssets struct{}
@@ -303,7 +329,7 @@ func (p *Pager) relayout() {
 	if p.doc != nil {
 		oldLen = len(p.doc.Lines)
 	}
-	p.doc = doc.Layout(p.src, doc.Options{
+	p.doc = doc.Layout(p.root, p.buf, doc.Options{
 		Width:         p.width,
 		Theme:         p.theme,
 		Cell:          p.cell,

@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/ncphillips/rex-md/internal/assets"
 	"github.com/ncphillips/rex-md/internal/pager"
@@ -82,11 +81,8 @@ func resolve(path string) (string, error) {
 	if !st.IsDir() {
 		return path, nil
 	}
-	for _, name := range []string{"README.md", "readme.md", "Readme.md", "index.md", "README.markdown"} {
-		p := filepath.Join(path, name)
-		if _, err := os.Stat(p); err == nil {
-			return p, nil
-		}
+	if p := pager.FindReadme(path); p != "" {
+		return p, nil
 	}
 	return "", fmt.Errorf("no README in %s", path)
 }
